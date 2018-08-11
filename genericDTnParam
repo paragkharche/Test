@@ -1,0 +1,196 @@
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
+using ApnaPay_DataContract;
+using System.Data.SqlClient;
+
+namespace MyProject
+{
+    public class genericDTnParam
+    {
+        public static IList<T> DatatableToClass<T>(DataTable Table) where T : class, new()
+        {
+            string failedToCast = "";
+            if (!Helper.IsValidDatatable(Table))
+                return new List<T>();
+
+            Type classType = typeof(T);
+            IList<PropertyInfo> propertyList = classType.GetProperties();
+
+            // Parameter class has no public properties.
+            if (propertyList.Count == 0)
+                return new List<T>();
+
+            List<string> columnNames = Table.Columns.Cast<DataColumn>().Select(column => column.ColumnName).ToList();
+
+            List<T> result = new List<T>();
+            try
+            {
+                foreach (DataRow row in Table.Rows)
+                {
+                    T classObject = new T();
+                    foreach (PropertyInfo property in propertyList)
+                    {
+                        if (property != null && property.CanWrite)   // Make sure property isn't read only
+                        {
+                            if (columnNames.Contains(property.Name))  // If property is a column name
+                            {
+                                failedToCast = Convert.ToString(property.Name);
+                                if (row[property.Name] != System.DBNull.Value)   // Don't copy over DBNull
+                                {
+                                    object propertyValue = System.Convert.ChangeType(
+                                            row[property.Name],
+                                            property.PropertyType
+                                        );
+                                    property.SetValue(classObject, propertyValue, null);
+                                }
+                            }
+                        }
+                    }
+                    result.Add(classObject);
+                }
+                return result;
+            }
+            catch(Exception ex)
+            {
+                Logging.LogException(ex, "DatatableToClass=="+ failedToCast);
+                return new List<T>();
+            }
+        }
+
+        public static T DatatableToClassById<T>(DataTable Table) where T : class, new()
+        {
+            if (!Helper.IsValidDatatable(Table))
+                return new T();
+
+            Type classType = typeof(T);
+            IList<PropertyInfo> propertyList = classType.GetProperties();
+
+            // Parameter class has no public properties.
+            if (propertyList.Count == 0)
+                return new T();
+
+            List<string> columnNames = Table.Columns.Cast<DataColumn>().Select(column => column.ColumnName).ToList();
+
+
+            T classObject = new T();
+            try
+            {
+                foreach (DataRow row in Table.Rows)
+                {
+
+                    foreach (PropertyInfo property in propertyList)
+                    {
+                        if (property != null && property.CanWrite)   // Make sure property isn't read only
+                        {
+                            if (columnNames.Contains(property.Name))  // If property is a column name
+                            {
+                                if (row[property.Name] != System.DBNull.Value)   // Don't copy over DBNull
+                                {
+                                    object propertyValue = System.Convert.ChangeType(
+                                            row[property.Name],
+                                            property.PropertyType
+                                        );
+                                    property.SetValue(classObject, propertyValue, null);
+                                }
+                            }
+                        }
+                    }
+                }
+                return classObject;
+                //return result;
+            }
+            catch(Exception ex)
+            {
+                return new T();
+            }
+        }
+
+        public static SqlParameter[] SqlParameter<T>(params T[] ClassObjects) where T : class, new()
+        {
+            //if (!Helper.IsValidDatatable(Table))
+            //    return new List<T>();
+            int count = 0;
+            Type classType = typeof(T);
+            IList<PropertyInfo> propertyList = classType.GetProperties();
+            Type entityType = ClassObjects.GetValue(0).GetType();
+            int paraCount = entityType.GetProperties().Count(p => p.GetValue(ClassObjects.GetValue(0), null) != null);
+            SqlParameter[] para = new SqlParameter[paraCount];
+            // Parameter class has no public properties.
+            if (propertyList.Count == 0)
+                return para;
+            try
+            {
+                for (int i = 0; i < propertyList.Count; i++)
+                {
+                    PropertyInfo property = (PropertyInfo)propertyList[i];
+                    var val = ClassObjects.GetValue(0).GetType().GetProperty(property.Name).GetValue(ClassObjects.GetValue(0), null);
+                    if (property != null && val != null)
+                    {
+                        para[count] = new SqlParameter("@" + property.Name, property.GetType());//.ParameterName = property.Name;
+                        para[count].Value = val;
+                        count += 1;
+                    }
+                }
+
+                return para;
+            }
+            catch (Exception ex)
+            {
+                return para;
+            }
+        }
+
+        public static SqlParameter[] SqlParameterWithoutZero<T>(params T[] ClassObjects) where T : class, new()
+        {
+            //if (!Helper.IsValidDatatable(Table))
+            //    return new List<T>();
+            int count = 0;
+            Type classType = typeof(T);
+            IList<PropertyInfo> propertyList = classType.GetProperties();
+            Type entityType = ClassObjects.GetValue(0).GetType();
+            int paraCount = entityType.GetProperties().Count(p => p.GetValue(ClassObjects.GetValue(0), null) != null && ClassObjects.GetValue(0).ToString() != "0");
+            //SqlParameter[] para = new SqlParameter[paraCount];
+            SqlParameter[] para =null;
+            // Parameter class has no public properties.
+            if (propertyList.Count == 0)
+                return para;
+            try
+            {
+                for (int i = 0; i < propertyList.Count; i++)
+                {
+                    PropertyInfo property = (PropertyInfo)propertyList[i];
+                    var val = ClassObjects.GetValue(0).GetType().GetProperty(property.Name).GetValue(ClassObjects.GetValue(0), null);
+                    if (property != null && val != null && val.ToString() != "0")
+                    {
+                        if(para==null)
+                        {
+                        para = new SqlParameter[1];
+                        para[0] = new SqlParameter("@" + property.Name, property.GetType());//.ParameterName = property.Name;
+                        para[0].Value = val;
+
+                        }
+                        else
+                        {
+                            Array.Resize(ref para, para.Length + 1);
+                            para[para.Count() - 1] = new SqlParameter("@" + property.Name, property.GetType());//.ParameterName = property.Name;
+                            para[para.Count() - 1].Value = val;
+                        }
+                        count += 1;
+                    }
+                }
+
+                return para;
+            }
+            catch (Exception ex)
+            {
+                return para;
+            }
+        }
+
+    }
+}
