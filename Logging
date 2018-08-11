@@ -1,0 +1,296 @@
+using System;
+using System.Collections.Generic;
+using System.Web;
+using System.Text;
+using System.Collections;
+using System.IO;
+using ApnaPay_DataContract;
+
+namespace MyProject
+{
+    public class Logging
+    {
+
+        /// <summary>
+        /// Returns generated path to logfile
+        /// </summary>
+        /// <returns></returns>
+        protected static string GetFileName(string info)
+        {
+            //string folder = info ? GetInfoFolder() : GetErrorFolder();
+            string folder = "";
+            if (info == "Logs_App")
+            {
+                folder = GetInfoFolder();
+            }
+            else if(info == "Logs_Error")
+            {
+                folder = GetErrorFolder();
+            }
+            else if (info == "Device_Logs")
+            {
+                folder = GetDeviceInfoFolder();
+            }
+
+            if (folder == null) return null;
+            StringBuilder stb = new StringBuilder();
+            stb.AppendFormat("{0}\\{1}{2}{3}_{4}.txt", folder, DateTime.Now.ToString("MM"), DateTime.Now.ToString("dd"), DateTime.Now.ToString("yyyy"), DateTime.Now.ToString("HH"));
+            return stb.ToString();
+        }
+
+        /// <summary>
+        /// Gets the enable loging
+        /// </summary>
+        /// <returns></returns>
+        protected static bool GetEnableLogging()
+        {
+            IDictionary dic = System.Configuration.ConfigurationManager.GetSection("ErrorHandling") as IDictionary;
+            bool enableLogging = false;
+            if (dic != null || dic["EnableLogging"] != null)
+            {
+                Boolean.TryParse(dic["EnableLogging"].ToString().Trim(), out enableLogging);
+            }
+            return enableLogging;
+        }
+
+        /// <summary>
+        /// Gets the name of error loging folder
+        /// </summary>
+        /// <returns></returns>
+        protected static string GetErrorFolder()
+        {
+            IDictionary dic = System.Configuration.ConfigurationManager.GetSection("ErrorHandling") as IDictionary;
+            string folder = dic == null || dic["ErrorLogFilesDir"] == null ? "" : dic["ErrorLogFilesDir"].ToString().Trim();
+            folder = HttpContext.Current.Server.MapPath("~/" + folder);
+            if (!Directory.Exists(folder))
+            {
+                return null;
+            }
+            else return folder;
+        }
+
+        /// <summary>
+        /// Gets the name of info loging folder
+        /// </summary>
+        /// <returns></returns>
+        protected static string GetInfoFolder()
+        {
+            IDictionary dic = System.Configuration.ConfigurationManager.GetSection("ErrorHandling") as IDictionary;
+            string folder = dic == null || dic["AppLogFilesDir"] == null ? "" : dic["AppLogFilesDir"].ToString().Trim();
+            folder = HttpContext.Current.Server.MapPath("~/" + folder);
+            if (!Directory.Exists(folder))
+            {
+                return null;
+            }
+            else return folder;
+        }
+
+
+        protected static string GetDeviceInfoFolder()
+        {
+            IDictionary dic = System.Configuration.ConfigurationManager.GetSection("ErrorHandling") as IDictionary;
+            string folder = dic == null || dic["DeviceLogFilesDir"] == null ? "" : dic["DeviceLogFilesDir"].ToString().Trim();
+            folder = HttpContext.Current.Server.MapPath("~/" + folder);
+            if (!Directory.Exists(folder))
+            {
+                return null;
+            }
+            else return folder;
+        }
+
+        /// <summary>
+        /// An internal method for writing data to file
+        /// </summary>
+        /// <param name="stb">
+        /// Data to be written
+        /// </param>
+        /// <param name="info">
+        /// If true, writes to info log folder
+        /// </param>
+        protected static void WriteToFile(StringBuilder stb, string info)
+        {
+            if (GetEnableLogging())
+            {
+                string path = GetFileName(info);
+                if (path != null)
+                {
+                    using (StreamWriter sw = File.AppendText(path))
+                    {
+                        sw.Write(stb.ToString());
+                        sw.Close();
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Logs any information to some text logfile in specific format
+        /// </summary>
+        /// <param name="info">
+        /// String containing information to be loged
+        /// </param>
+        public static void LogInfo(string info)
+        {
+            LogInfo(info, false);
+        }
+
+        /// <summary>
+        /// Logs any information to some text logfile in specific format
+        /// </summary>
+        /// <param name="info">
+        /// String containing information to be loged
+        /// </param>
+        /// /// <param name="includeAdditionalInfo">
+        /// In true, additional info about request, session etc. will be included into log record
+        /// </param>
+        public static void LogInfo(string info, bool includeAdditionalInfo)
+        {
+
+            StringBuilder stb = new StringBuilder();
+            stb.Append("<Activity>");
+            stb.AppendLine();
+            stb.AppendFormat("<DateTime>{0}</DateTime>", DateTime.Now);
+            stb.AppendLine();
+            stb.AppendFormat("<Message>{0}</Message>", info);
+            stb.AppendLine();
+            stb.Append("</Activity>");
+            stb.AppendLine();
+            stb.AppendLine();
+            lock (typeof(Logging))
+            {
+                WriteToFile(stb, "Logs_App");
+            }
+        }
+
+
+        public static void DeviceLogInfo(DeviceLogs info)
+        {
+
+            StringBuilder stb = new StringBuilder();
+            stb.Append("<Activity>");
+            stb.AppendLine();
+            stb.AppendFormat("<DateTime>{0}</DateTime>", DateTime.Now);
+            stb.AppendLine();
+            stb.AppendFormat("<UserID>{0}</UserID>", info.UserID);
+            stb.AppendLine();
+            stb.AppendFormat("<TerminalID>{0}</TerminalID>", info.TerminalID);
+            stb.AppendLine();
+            stb.AppendFormat("<LogType>{0}</LogType>", info.LogType);
+            stb.AppendLine();
+            stb.AppendFormat("<Method>{0}</Method>", info.Method);
+            stb.AppendLine();
+            stb.AppendFormat("<Message>{0}</Message>", info.LogInformation);
+            stb.AppendLine();
+            stb.Append("</Activity>");
+            stb.AppendLine();
+            stb.AppendLine();
+            lock (typeof(Logging))
+            {
+                WriteToFile(stb, "Device_Logs");
+            }
+        }
+
+
+        /// <summary>
+        /// Logs as exception pointed to some text logfile in specific format
+        /// </summary>
+        /// <param name="er">
+        /// Exception to be loged
+        /// </param>
+        public static void LogException(Exception er)
+        {
+            LogException(er, string.Empty, ErrorLevel.ERROR);
+        }
+
+        /// <summary>
+        /// Logs as exception pointed to some text logfile in specific format
+        /// </summary>
+        /// <param name="er">
+        /// Exception to be loged
+        /// </param>
+        /// <param name="strMessage">
+        /// custom message to be loged
+        /// </param>
+        public static void LogException(Exception er, string strMessage)
+        {
+            LogException(er, strMessage, ErrorLevel.ERROR);
+        }
+
+        /// <summary>
+        /// Logs as exception pointed to some text logfile in specific format
+        /// </summary>
+        /// <param name="er">
+        /// Exception to be loged
+        /// </param>
+        /// <param name="strMessage">
+        /// custom message to be loged
+        /// </param>
+        /// <param name="errLevel">
+        /// error level
+        /// </param>
+        public static void LogException(Exception er, string strMessage, ErrorLevel errLevel)
+        {
+
+            try
+            {
+                StringBuilder stb = new StringBuilder();
+                stb.Append("<Exception>");
+                stb.AppendLine();
+                stb.AppendFormat("<DateTime>{0}</DateTime>", DateTime.Now);
+                stb.AppendLine();
+                if (strMessage != string.Empty)
+                {
+                    stb.AppendFormat("<CustomMessage>{0}</CustomMessage>", strMessage);
+                    stb.AppendLine();
+                }
+
+                stb.AppendLine();
+
+                stb.AppendFormat("<ErrorMessage>{0}</ErrorMessage>", er.ToString());
+
+                if (er.InnerException != null)
+                {
+                    stb.AppendLine();
+                    stb.AppendFormat("<InnerException>{0}</InnerException>", er.InnerException.ToString());
+                }
+
+                //if (er.StackTrace != null)
+                //{
+                //    stb.AppendLine();
+                //    stb.AppendFormat("<StackTrace>{0}</StackTrace>", er.StackTrace);
+                //}
+
+                stb.AppendLine();
+                stb.AppendLine();
+                stb.Append("</Exception>");
+
+                stb.AppendLine();
+                lock (typeof(Logging))
+                {
+                    WriteToFile(stb, "Logs_Error");
+                    //WriteToFile(stb, false);
+                }
+
+                if (errLevel == ErrorLevel.FATAL_ERROR)
+                {
+                    //Send Email to admin code
+                }
+            }
+            catch (Exception)
+            {
+                //do nothing for now
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Level of error
+    /// </summary>
+    public enum ErrorLevel : int
+    {
+        FATAL_ERROR = 3,
+        ERROR = 2,
+        WARNING = 1
+    }
+}
